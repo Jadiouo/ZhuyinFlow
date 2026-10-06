@@ -1,0 +1,20 @@
+# Swift, CMake, and local build outputs
+.build/
+**/.build/
+**/cmake-build-*/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/Testing/
+
+# Generated user dictionaries and local test artifacts
+*.txtMap
+*.revlookup
+*.dSYM/
+
+# Local/editor files
+.DS_Store
+*.swp
+*.swo
+
+# Internal evaluation artifacts are not part of the public project
+vchewing-linux-lab/

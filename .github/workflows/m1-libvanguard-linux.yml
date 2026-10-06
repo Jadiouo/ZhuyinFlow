@@ -1,0 +1,185 @@
+name: M1 LibVanguard Linux tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container: swift:6.4
+    steps:
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Prepare result directory
+        run: |
+          mkdir -p artifacts
+          printf '# M1 測試結果\n\n尚未開始測試。\n' > artifacts/results.md
+
+      - name: Build and test LibVanguard
+        shell: bash
+        run: |
+          set +e
+          swift build --package-path upstream/Packages/vChewing_OSNeutral_LibVanguard \
+            > artifacts/build.log 2>&1
+          build_status=$?
+          swift test --no-parallel \
+            --package-path upstream/Packages/vChewing_OSNeutral_LibVanguard \
+            --xunit-output artifacts/xunit.xml \
+            > artifacts/test.log 2>&1
+          test_status=$?
+          set -e
+
+          set +e
+          swift - "$build_status" "$test_status" <<'SWIFT'
+          import Foundation
+          import FoundationXML
+          import Glibc
+
+          struct TestCaseResult {
+            let name: String
+            var failed = false
+            var skipped = false
+          }
+
+          final class XUnitParser: NSObject, XMLParserDelegate {
+            var cases: [TestCaseResult] = []
+            private var current: TestCaseResult?
+
+            func parser(
+              _ parser: XMLParser,
+              didStartElement elementName: String,
+              namespaceURI: String?,
+              qualifiedName qName: String?,
+              attributes: [String: String] = [:]
+            ) {
+              switch elementName {
+              case "testcase":
+                let className = attributes["classname"] ?? ""
+                let name = attributes["name"] ?? "(未命名測試)"
+                current = TestCaseResult(name: [className, name].filter { !$0.isEmpty }.joined(separator: "."))
+              case "failure", "error":
+                current?.failed = true
+              case "skipped":
+                current?.skipped = true
+              default:
+                break
+              }
+            }
+
+            func parser(
+              _ parser: XMLParser,
+              didEndElement elementName: String,
+              namespaceURI: String?,
+              qualifiedName qName: String?
+            ) {
+              guard elementName == "testcase", let current else { return }
+              cases.append(current)
+              self.current = nil
+            }
+          }
+
+          let arguments = CommandLine.arguments
+          let buildStatus = Int(arguments[1])!
+          let testStatus = Int(arguments[2])!
+          let resultURL = URL(fileURLWithPath: "artifacts/results.md")
+          let artifactsURL = URL(fileURLWithPath: "artifacts")
+          let xmlURLs = (try? FileManager.default.contentsOfDirectory(
+            at: artifactsURL,
+            includingPropertiesForKeys: nil
+          ))?
+            .filter { $0.lastPathComponent.hasPrefix("xunit") && $0.pathExtension == "xml" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent } ?? []
+          var allCases: [TestCaseResult] = []
+          var parseErrors: [String] = []
+
+          for xmlURL in xmlURLs {
+            let delegate = XUnitParser()
+            let parser = XMLParser(contentsOf: xmlURL)
+            parser?.delegate = delegate
+            if parser?.parse() == true {
+              allCases += delegate.cases
+            } else {
+              let reason = parser?.parserError?.localizedDescription ?? "無法讀取 xUnit XML。"
+              parseErrors.append("\(xmlURL.lastPathComponent)：\(reason)")
+            }
+          }
+
+          if xmlURLs.isEmpty { parseErrors.append("swift test 未產生 xUnit XML。") }
+          let parseError = parseErrors.isEmpty ? nil : parseErrors.joined(separator: "\n")
+          let failedCases = allCases.filter(\.failed)
+          let skippedCount = allCases.filter(\.skipped).count
+          let passedCount = allCases.count - failedCases.count - skippedCount
+
+          var lines = [
+            "# M1 測試結果",
+            "",
+            "- `swift build` 結束碼：\(buildStatus)",
+            "- `swift test --no-parallel` 結束碼：\(testStatus)",
+            "- 通過數：\(parseError == nil ? String(passedCount) : "無法取得")",
+            "- 失敗數：\(parseError == nil ? String(failedCases.count) : "無法取得")",
+            "- 略過數：\(parseError == nil ? String(skippedCount) : "無法取得")",
+            "",
+            "## 失敗的測試",
+            "",
+          ]
+          lines += failedCases.map { "- `\($0.name)`" }
+          if failedCases.isEmpty { lines.append("- 無") }
+          if let parseError { lines += ["", "xUnit 統計問題：\(parseError)"] }
+          lines += [
+            "",
+            "完整輸出見 `build.log`、`test.log`；原始測試結果見 `xunit*.xml`。",
+            "",
+          ]
+          try String(lines.joined(separator: "\n")).write(to: resultURL, atomically: true, encoding: .utf8)
+
+          if parseError != nil { exit(1) }
+          SWIFT
+          report_status=$?
+          set -e
+
+          if [ "$build_status" -ne 0 ] || [ "$test_status" -ne 0 ] || [ "$report_status" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Test vg-repl
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          swift test --no-parallel \
+            --package-path vg-repl \
+            --xunit-output artifacts/vg-repl-xunit.xml \
+            > artifacts/vg-repl-test.log 2>&1
+          swift build --package-path vg-repl --product vgbridge \
+            > artifacts/vgbridge-build.log 2>&1
+          bin_path="$(swift build --package-path vg-repl --show-bin-path)"
+          clang -fsanitize=address -g \
+            -I vg-repl/Sources/VGBridge/include \
+            vg-repl/Tests/c/test_vgbridge.c \
+            -L "$bin_path" -lvgbridge -Wl,-rpath,"$bin_path" \
+            -o /tmp/test_vgbridge \
+            > artifacts/vgbridge-compile.log 2>&1
+          LD_LIBRARY_PATH="$bin_path" ASAN_OPTIONS=detect_leaks=1 \
+            /tmp/test_vgbridge > artifacts/vgbridge.jsonl
+          printf 's\nu\n3\n' \
+            | swift run --package-path vg-repl --quiet vg-repl --layout dachen \
+            > artifacts/vg-repl-golden.jsonl
+          diff -u vg-repl/Tests/Fixtures/fcitx-su3.jsonl \
+            artifacts/vg-repl-golden.jsonl
+          diff -u vg-repl/Tests/Fixtures/fcitx-su3.jsonl \
+            artifacts/vgbridge.jsonl
+          printf 'Swift and C bridge tests passed; outputs match the shared golden.\n' \
+            > artifacts/vgbridge-status.txt
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: m1-libvanguard-linux-results
+          path: artifacts/
+          if-no-files-found: warn

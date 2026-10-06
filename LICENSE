@@ -1,0 +1,11 @@
+ZhuyinFlow is a multi-license work. The license depends on the component:
+
+- ZhuyinFlow-authored project files are licensed under MulanPSL-2.0.
+- The upstream Vanguard core remains under LGPL-3.0-or-later with its
+  component-specific custom exceptions.
+- The separately fetched Vanguard Lexicon builder source carries its upstream
+  MulanPSL-2.0 notice. The generated TextMap is not distributed here; review
+  the licenses of its source data before redistributing it.
+
+See LICENSES/README.md for the component map and the accompanying license
+texts. Do not treat this file as relicensing the upstream submodule or its data.
