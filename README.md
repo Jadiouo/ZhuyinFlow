@@ -57,11 +57,15 @@ restarting Fcitx.
 
 ### Upgrade from the earlier local prototype
 
-Earlier local builds of this project used the Fcitx ID `vchewing`. After
-confirming ZhuyinFlow works, remove that old entry from your Fcitx profile. If
-those old files came only from this project's installer, remove its obsolete
-plugin and descriptors; do not use this cleanup for a separately installed
-vChewing add-on:
+To keep only ZhuyinFlow and the English keyboard in the Fcitx input-method
+menu, remove the **McBopomofo** and **vChewing** entries from the active group
+in Fcitx Configuration → Input Method. This removes them from your profile;
+it does not uninstall the McBopomofo system package or erase its user data.
+
+Earlier local builds of this project used the Fcitx ID `vchewing`. If those
+files came only from this project's installer, remove its obsolete plugin and
+descriptors; do not use this cleanup for a separately installed vChewing
+add-on:
 
 ```sh
 rm -f "$HOME/.local/lib/fcitx5/vchewing.so" \

@@ -75,6 +75,13 @@ docker run --rm --user "$(id -u):$(id -g)" \
   '
 
 install -m 0644 "$text_map" "$data_root/VanguardFactoryDict4Typing.txtMap"
+icon_theme_dir="${XDG_DATA_HOME:-$HOME/.local/share}/icons/hicolor"
+if [[ ! -f "$icon_theme_dir/index.theme" && -f /usr/share/icons/hicolor/index.theme ]]; then
+  install -D -m 0644 /usr/share/icons/hicolor/index.theme "$icon_theme_dir/index.theme"
+fi
+if command -v gtk-update-icon-cache >/dev/null && [[ -f "$icon_theme_dir/index.theme" ]]; then
+  gtk-update-icon-cache --force "$icon_theme_dir"
+fi
 ctest --test-dir "$build_dir/cmake" --output-on-failure
 runtime_report="$(ldd "$library_dir/libvgbridge.so" 2>&1)"
 if grep -Eq 'not found|version .* not found' <<<"$runtime_report"; then

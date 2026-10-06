@@ -33,3 +33,16 @@
 - Swift 6.4 tests passed 6/6 and the Fcitx TestFrontend tests passed 2/2.
   Rendering the panel icon in the user's desktop panel still needs visual
   confirmation.
+
+## 2026-10-06 — Clean up the Fcitx input-method menu
+
+- Removed McBopomofo and the legacy vChewing entry from the active Fcitx
+  profile, leaving the English keyboard and ZhuyinFlow. Removed the obsolete
+  user-local vChewing addon files; kept the system McBopomofo package and its
+  user data untouched.
+- Found that the user hicolor icon directory had no `index.theme`, so the
+  installed ZhuyinFlow icon could not be indexed. Updated the installer to
+  create the standard user-local theme index when missing and refresh its
+  icon cache.
+- Kept Swift as the Vanguard core and bridge implementation; no Rust rewrite
+  was needed for this request.
