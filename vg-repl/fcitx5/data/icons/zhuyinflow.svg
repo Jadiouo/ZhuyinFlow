@@ -1,7 +1,6 @@
 <!-- SPDX-FileCopyrightText: 2026 ZhuyinFlow contributors -->
 <!-- SPDX-License-Identifier: MulanPSL-2.0 -->
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <rect x="1" y="1" width="30" height="30" rx="7" fill="#315b9a"/>
-  <path d="M8 8h16v3L13 21h11v3H8v-3l11-10H8z" fill="#fff"/>
-  <circle cx="25" cy="24" r="3" fill="#f4b942"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect x="2" y="2" width="60" height="60" rx="13" fill="#173b73"/>
+  <path d="M14 14h36v9L25 42h25v9H14v-9l25-19H14z" fill="#fff"/>
 </svg>

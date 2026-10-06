@@ -151,7 +151,7 @@ class VGEngine final : public fcitx::InputMethodEngineV2 {
         mixedAlphanumericalEnabled_(
             readBooleanEnvironment("ZHUYINFLOW_MIXED_ALPHANUMERICAL", true)),
         furiousTypingEnabled4Zhuyin_(
-            readBooleanEnvironment("ZHUYINFLOW_FURIOUS_TYPING_ZHUYIN", true)) {
+            readBooleanEnvironment("ZHUYINFLOW_FURIOUS_TYPING_ZHUYIN", false)) {
     if (instance_ == nullptr ||
         !instance_->inputContextManager().registerProperty("zhuyinflow-session", &propertyFactory_)) {
       throw std::runtime_error("Could not register ZhuyinFlow input-context state.");

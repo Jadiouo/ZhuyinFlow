@@ -29,6 +29,7 @@ int main() {
     FCITX_ASSERT(entry);
     FCITX_ASSERT(entry->label() == "Z");
     FCITX_ASSERT(entry->icon() == "zhuyinflow");
+    FCITX_ASSERT(entry->name() == "ZhuyinFlow");
 
     auto *frontend = instance.addonManager().addon("testfrontend");
     FCITX_ASSERT(frontend);

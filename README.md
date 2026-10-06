@@ -9,18 +9,26 @@ upstream maintainers.
 The name and icon are independent of vChewing. The icon uses the first letter
 of **ZhuyinFlow**.
 
+## Architecture
+
+ZhuyinFlow does not reimplement the input engine: it uses the upstream
+vChewing Vanguard core written in Swift, exposes the required C ABI through a
+small Swift bridge, and connects that bridge to Fcitx 5 with a native C++
+addon. A Rust rewrite is not part of this project.
+
 ## Features
 
 - Traditional Zhuyin input using the Dachen keyboard layout.
 - Chinese/English mixed typing.
-- Zhuyin furious typing. With mixed typing enabled, ASCII input is handled by
+- Optional Zhuyin furious typing. With mixed typing enabled, ASCII input is handled by
   the mixed-typing path and automatic syllable chopping is suppressed by the
-  upstream engine; disable mixed typing to use automatic chopping.
+  upstream engine; enable furious typing and disable mixed typing to use
+  automatic chopping.
 - Per-Fcitx-input-context composition, candidate selection, and commits.
 - Swift 6.4 bridge and Fcitx 5 native addon.
 
-The input method is configured to enable mixed typing and Zhuyin furious
-typing by default. See [Configuration](#configuration) to change either.
+The input method enables mixed typing by default; Zhuyin furious typing is
+disabled by default. See [Configuration](#configuration) to change either.
 
 ## Install on Ubuntu
 
@@ -85,15 +93,15 @@ after restarting Fcitx:
 | Variable | Default | Meaning |
 |---|---:|---|
 | `ZHUYINFLOW_MIXED_ALPHANUMERICAL` | `1` | Enable Chinese/English mixed typing. Set to `0` to disable it. |
-| `ZHUYINFLOW_FURIOUS_TYPING_ZHUYIN` | `1` | Enable Zhuyin furious typing. Set to `0` to disable it. |
+| `ZHUYINFLOW_FURIOUS_TYPING_ZHUYIN` | `0` | Enable optional Zhuyin furious typing. Set to `1` to enable it. |
 | `ZHUYINFLOW_TEXTMAP` | installed TextMap | Use a specific factory TextMap path. |
 | `ZHUYINFLOW_REBUILD_TEXTMAP` | `0` | Set to `1` to rebuild the factory TextMap during installation. |
 | `ZHUYINFLOW_SWIFT_IMAGE` | `swift:6.4-noble` | Override the Swift Docker image used by the installer. |
 
-When mixed typing is enabled, the upstream core continues to use furious-typing
-reading suggestions, but does not automatically chop sequential Zhuyin
-syllables. Set `ZHUYINFLOW_MIXED_ALPHANUMERICAL=0` and leave furious typing
-enabled if automatic syllable chopping is preferred.
+When mixed typing is enabled, the upstream core does not automatically chop
+sequential Zhuyin syllables. To opt into automatic syllable chopping, set
+`ZHUYINFLOW_MIXED_ALPHANUMERICAL=0` and
+`ZHUYINFLOW_FURIOUS_TYPING_ZHUYIN=1`.
 
 ## Build and test
 
