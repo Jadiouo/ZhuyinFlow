@@ -46,3 +46,12 @@
   icon cache.
 - Kept Swift as the Vanguard core and bridge implementation; no Rust rewrite
   was needed for this request.
+
+## 2026-10-06 — Restore Fcitx addon discovery
+
+- Diagnosed the “Not Available” input method: the D-Bus-activated Fcitx process
+  did not inherit `FCITX_ADDON_DIRS`, so it could not locate the user-local
+  `zhuyinflow.so`. Confirmed the addon loads when the variable is present.
+- Set the path in the current D-Bus and systemd user activation environments
+  and in both existing user Fcitx autostart entries. The active input method
+  now resolves to `zhuyinflow`.
