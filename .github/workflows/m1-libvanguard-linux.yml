@@ -274,9 +274,60 @@ jobs:
       - name: Verify package installation, installed code, and removal
         shell: bash
         run: |
+          verify_work="$RUNNER_TEMP/zhuyinflow-package-verify"
+          evidence="$GITHUB_WORKSPACE/artifacts/package-verify-evidence"
+          mkdir -p "$evidence"
+          collect_evidence() {
+            verification_status=$?
+            trap - EXIT
+            collection_status=0
+            for name in apt-update.log apt-install.log apt-remove.log \
+              dpkg-verify.txt explicit-missing.log system-map.log personal-map.log \
+              personal-invalid.log migration-check.log migration.log migration-backup.txt \
+              installed-metadata.txt installed-files.txt installed-ldd.txt installed-elf.txt; do
+              source_file="$verify_work/$name"
+              if [ -f "$source_file" ] && [ ! -L "$source_file" ] && [ -r "$source_file" ]; then
+                cp -- "$source_file" "$evidence/$name" || collection_status=1
+              elif [ "$verification_status" -eq 0 ]; then
+                printf 'Missing or unsafe verification evidence: %s\n' "$name" >&2 || collection_status=1
+                collection_status=1
+              fi
+            done
+            if [ "$verification_status" -eq 0 ]; then
+              grep -Fx 'PACKAGE_INSTALL_LOADER_DICTIONARY_MIGRATION_REMOVE_OK' \
+                artifacts/package-verify.log > "$evidence/result.txt" || collection_status=1
+            fi
+            printf '%s\n' "$verification_status" > "$evidence/verification.exit" || collection_status=1
+            printf '%s\n' "$collection_status" > "$evidence/collection.exit" || collection_status=1
+            if [ "$verification_status" -ne 0 ]; then exit "$verification_status"; fi
+            exit "$collection_status"
+          }
+          # Copy fixed evidence only; isolated HOME/runtime state stays in RUNNER_TEMP.
+          trap collect_evidence EXIT
           bash packaging/verify-deb.sh dist/zhuyinflow_0.1.0_amd64.deb \
-            artifacts/package-verify \
+            "$verify_work" \
             2>&1 | tee artifacts/package-verify.log
+
+      - name: Check every package artifact before upload
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import glob, hashlib, json, pathlib, stat
+          patterns = ["dist/*.deb", "dist/*_sources.tar.xz", "dist/*_SHA256SUMS",
+                      "artifacts/package-*.log", "artifacts/package-verify-evidence/*"]
+          files = sorted({pathlib.Path(p) for pattern in patterns for p in glob.glob(pattern)})
+          assert all(glob.glob(pattern) for pattern in patterns), "Missing artifact group"
+          records = []
+          for path in files:
+              assert stat.S_ISREG(path.lstat().st_mode), f"Non-regular artifact: {path}"
+              digest = hashlib.sha256()
+              with path.open("rb") as stream:
+                  for block in iter(lambda: stream.read(1024 * 1024), b""):
+                      digest.update(block)
+              records.append({"path": str(path), "sha256": digest.hexdigest()})
+          pathlib.Path("artifacts/package-upload-manifest.json").write_text(
+              json.dumps(records, indent=2) + "\n")
+          PY
 
       - name: Upload installable package, sources, and verification logs
         if: always()
@@ -288,5 +339,6 @@ jobs:
             dist/*_sources.tar.xz
             dist/*_SHA256SUMS
             artifacts/package-*.log
-            artifacts/package-verify/
+            artifacts/package-verify-evidence/
+            artifacts/package-upload-manifest.json
           if-no-files-found: warn
