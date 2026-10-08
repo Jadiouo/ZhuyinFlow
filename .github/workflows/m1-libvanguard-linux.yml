@@ -154,7 +154,7 @@ jobs:
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
-            cmake pkg-config libfcitx5core-dev libfcitx5config-dev \
+            build-essential cmake pkg-config libfcitx5core-dev libfcitx5config-dev \
             libfcitx5utils-dev fcitx5-modules-dev fcitx5 nlohmann-json3-dev
 
       - name: Test vg-repl and spelling golden

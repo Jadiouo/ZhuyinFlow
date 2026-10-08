@@ -150,7 +150,7 @@ bash vg-repl/Tests/c/test_output_contract.sh /path/to/test_vgbridge \
   vg-repl/Tests/Fixtures/fcitx-su3.jsonl .scratch/vgbridge
 ```
 
-The headless script needs CMake, pkg-config, `libfcitx5core-dev`,
+The headless script needs `build-essential`, CMake, pkg-config, `libfcitx5core-dev`,
 `libfcitx5config-dev`, `libfcitx5utils-dev`, `fcitx5-modules-dev`, `fcitx5`, and
 `nlohmann-json3-dev` on Ubuntu 24.04 (Fcitx 5.1.7). Each
 TestFrontend process gets private HOME/XDG/FCITX directories and a repository

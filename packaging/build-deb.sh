@@ -55,9 +55,16 @@ if [[ -n $(git -C "$repo" status --porcelain) ]]; then
 else
   echo 'root_dirty=false' >> "$work/source/BUILD-PROVENANCE"
 fi
-docker build --build-arg "SWIFT_IMAGE=$swift_image" -t "$image" "$repo/packaging"
-docker image inspect "$image" --format '{{.Id}}' > "$work/build-image.txt"
+# BuildKit may cache a FROM image without importing its tag into the daemon.
+# Resolve before building so cold runners can inspect the actual base image.
+if ! docker image inspect "$swift_image" >/dev/null 2>&1; then
+  docker pull "$swift_image"
+fi
+swift_build_base=$(docker image inspect "$swift_image" --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}')
+swift_build_base=${swift_build_base:-$swift_image}
 docker image inspect "$swift_image" --format '{{.Id}} {{join .RepoDigests " "}}' > "$work/source/SWIFT-IMAGE"
+docker build --build-arg "SWIFT_IMAGE=$swift_build_base" -t "$image" "$repo/packaging"
+docker image inspect "$image" --format '{{.Id}}' > "$work/build-image.txt"
 docker run --rm --network=none "$image" dpkg-query -W > "$work/source/BUILD-PACKAGES"
 (cd "$work/source" && find . -type f ! -name SOURCE-SHA256 -print0 | sort -z | xargs -0 sha256sum > SOURCE-SHA256)
 docker run --rm --network=none --user "$(id -u):$(id -g)" \
