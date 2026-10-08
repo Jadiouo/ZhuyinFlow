@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 ZhuyinFlow contributors
+# SPDX-License-Identifier: MulanPSL-2.0
+set -euo pipefail
+case ${1:---check} in --check|--migrate) action=${1:---check} ;; *) echo 'Usage: zhuyinflow-migrate [--check|--migrate]' >&2; exit 2 ;; esac
+data=${XDG_DATA_HOME:-$HOME/.local/share}
+files=("$HOME/.local/lib/fcitx5/zhuyinflow.so" "$HOME/.local/lib/fcitx5/libvgbridge.so" "$HOME/.local/lib/fcitx5/libVanguard.so"
+  "$data/fcitx5/addon/zhuyinflow.conf" "$data/fcitx5/inputmethod/zhuyinflow.conf" "$data/icons/hicolor/scalable/apps/zhuyinflow.svg")
+found=0
+for file in "${files[@]}"; do
+  [[ -e $file || -L $file ]] || continue
+  found=1
+  printf 'Existing user installation: %s\n' "$file"
+done
+if (( ! found )); then echo 'No legacy user-local ZhuyinFlow files found.'; exit 0; fi
+if [[ $action == --check ]]; then
+  echo 'These files may shadow the system package. Run zhuyinflow-migrate --migrate to back them up, then log out and in.'
+  exit 0
+fi
+backup=${XDG_STATE_HOME:-$HOME/.local/state}/zhuyinflow/migration-$(date -u +%Y%m%dT%H%M%SZ)-$$
+mkdir -p "$backup"
+for file in "${files[@]}"; do
+  [[ -e $file || -L $file ]] || continue
+  # Preserve a manifest and separate payload slots for arbitrary XDG paths.
+  slot=$(find "$backup" -maxdepth 1 -type f | wc -l)
+  printf '%s\n' "$file" > "$backup/$slot.original-path"
+  mv -- "$file" "$backup/$slot.payload"
+done
+printf 'Backup: %s\nPersonal dictionaries and preferences were retained. No running process was changed.\n' "$backup"

@@ -1,5 +1,7 @@
 # Swift, CMake, and local build outputs
 .build/
+.scratch/
+dist/
 **/.build/
 **/cmake-build-*/
 **/CMakeFiles/

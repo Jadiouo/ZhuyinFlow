@@ -1,0 +1,35 @@
+[
+  {
+    "name": "Swift-runtime-LICENSE.txt",
+    "source": "local swift:6.4-noble /usr/share/swift/LICENSE.txt",
+    "sha256": "770af8291f708538d8ff885a0bbc4e045cd700531741c4f99528d435c14d7f55"
+  },
+  {
+    "name": "GPL-3.0.txt",
+    "source": "/usr/share/common-licenses/GPL-3",
+    "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+  },
+  {
+    "name": "SwiftExtension-MulanPSL.txt",
+    "source": "upstream/Packages/vChewing_OSNeutral_LibVanguard/Deps/VanguardSwiftExtension/LICENSE",
+    "sha256": "4d693fd2e292e524992a86fbac28a055cdd5895b4a713eecaf4623d48454645e"
+  },
+  {
+    "name": "swift-foundation-icu-LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/swiftlang/swift-foundation-icu/e8538d259340dd5b8c261f539f2693d094fe2dac/LICENSE.md",
+    "sha256": "2245a990b635558be210fb3eb4f8a6f7a49aebc0fefbf5859146a65ddc7ddcf3",
+    "boundary": "immutable official license reference, not evidence of exact binary source revision"
+  },
+  {
+    "name": "swift-corelibs-libdispatch-LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/swiftlang/swift-corelibs-libdispatch/20a437fd23aace2319395209228627ce3963d27c/LICENSE",
+    "sha256": "0ca84095d1de77cad1a866ebbad28f8db98a0826c6055d92b0608c5baa1643e2",
+    "boundary": "immutable official license reference, not evidence of exact binary source revision"
+  },
+  {
+    "name": "ICU-76.1-LICENSE.txt",
+    "source": "https://raw.githubusercontent.com/unicode-org/icu/release-76-1/LICENSE",
+    "sha256": "01edac20612b1e590c1c1cfb02b7218c6adc7b0a944eda7a1e03aeee10725aed",
+    "basis": "actual runtime swift_u_getVersion returned [76,1,0,0]"
+  }
+]

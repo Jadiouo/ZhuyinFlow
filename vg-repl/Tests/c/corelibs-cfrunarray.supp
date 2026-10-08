@@ -1,0 +1,5 @@
+# Swift 6.4 RELEASE Linux Foundation CFRunArray lifetime leak.
+# Foundation-only NSMutableAttributedString(string: "") reproduces 112 bytes.
+# This exact allocation frame covers leaked run-array roots and LSan indirect children.
+# Never suppress libFoundation, swift_allocObject, malloc, or VGBridge generally.
+leak:^CFRunArrayCreate$

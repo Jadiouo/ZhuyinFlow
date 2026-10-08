@@ -32,6 +32,26 @@ disabled by default. See [Configuration](#configuration) to change either.
 
 ## Install on Ubuntu
 
+For Ubuntu 24.04 LTS **amd64**, install the `.deb` and matching source archive
+from the same release. Verify `zhuyinflow_0.1.0_SHA256SUMS`, then:
+
+```sh
+sudo apt install ./zhuyinflow_0.1.0_amd64.deb
+zhuyinflow-migrate --check
+```
+
+If a previous user-local installation is listed, run
+`zhuyinflow-migrate --migrate` to move those addon files to a recoverable backup;
+personal dictionaries and preferences remain in place. Log out and back in,
+open **注音流設定 / ZhuyinFlow Settings**, and add ZhuyinFlow in Fcitx.
+The package does not change the system default input method or restart Fcitx.
+It includes a factory dictionary and private Swift runtimes without replacing
+system Swift/Fcitx libraries. See [package installation, upgrade, removal and
+source builds](packaging/README.md). Other distributions/architectures are not
+currently supported by this package.
+
+### Build a user-local installation
+
 The supported setup currently targets Ubuntu 24.04 and Fcitx 5. Install the
 Fcitx 5 development files, CMake, pkg-config, Git, Docker, and a working Docker
 daemon first. The installer uses the `swift:6.4-noble` container image to build
@@ -77,7 +97,12 @@ rm -f "$HOME/.local/lib/fcitx5/vchewing.so" \
 
 Select **ZhuyinFlow** in Fcitx and type with the Dachen Zhuyin keyboard. For
 example, `s u 3` produces the reading ㄋㄧˇ; choose a candidate or confirm it
-with Space/Enter according to the active Fcitx key bindings.
+with Enter. Press Down to enter candidate selection, use arrow keys or
+PageUp/PageDown to navigate (Space also advances a page in selection mode),
+then choose a label from 1–9. Enter selects the highlighted candidate and commits
+it. During ordinary typing, Space follows the upstream typing behavior.
+Candidate suggestions during ordinary typing do not consume Dachen digit keys;
+those keys can start the next syllable.
 
 The project also includes a spelling-only REPL that does not need the factory
 dictionary:
@@ -98,7 +123,7 @@ after restarting Fcitx:
 |---|---:|---|
 | `ZHUYINFLOW_MIXED_ALPHANUMERICAL` | `1` | Enable Chinese/English mixed typing. Set to `0` to disable it. |
 | `ZHUYINFLOW_FURIOUS_TYPING_ZHUYIN` | `0` | Enable optional Zhuyin furious typing. Set to `1` to enable it. |
-| `ZHUYINFLOW_TEXTMAP` | installed TextMap | Use a specific factory TextMap path. |
+| `ZHUYINFLOW_TEXTMAP` | personal, then packaged TextMap | Use a specific factory TextMap path. Explicit bad paths show an error. |
 | `ZHUYINFLOW_REBUILD_TEXTMAP` | `0` | Set to `1` to rebuild the factory TextMap during installation. |
 | `ZHUYINFLOW_SWIFT_IMAGE` | `swift:6.4-noble` | Override the Swift Docker image used by the installer. |
 
@@ -116,11 +141,41 @@ docker run --rm -v "$PWD":/work -w /work swift:6.4-noble \
   swift build --package-path /work/vg-repl --product vgbridge
 ```
 
-Run the Fcitx adapter and TestFrontend integration tests through the installer,
-or build the Fcitx addon with CMake after building the bridge. The installer
-also checks shared-library dependencies before reporting success.
+After building the bridge, run isolated headless tests without installing it:
+
+```sh
+bin_path="$PWD/vg-repl/.build/debug"
+bash vg-repl/scripts/test-headless.sh "$bin_path" .scratch/headless-Debug Debug
+bash vg-repl/Tests/c/test_output_contract.sh /path/to/test_vgbridge \
+  vg-repl/Tests/Fixtures/fcitx-su3.jsonl .scratch/vgbridge
+```
+
+The headless script needs CMake, pkg-config, `libfcitx5core-dev`,
+`libfcitx5config-dev`, `libfcitx5utils-dev`, `fcitx5-modules-dev`, `fcitx5`, and
+`nlohmann-json3-dev` on Ubuntu 24.04 (Fcitx 5.1.7). Each
+TestFrontend process gets private HOME/XDG/FCITX directories and a repository
+TextMap fixture; it does not use personal dictionaries or the running desktop
+Fcitx instance. When running outside the Swift container, include its Swift
+runtime directory in `LD_LIBRARY_PATH`.
+
+CI builds Debug and Release bridges, compares the entire C harness stdout with
+the shared spelling golden, checks that lexicon diagnostics remain on stderr,
+and runs the headless suite in both configurations. The harness reserves a
+separate writer for its JSON output; the bridge itself returns JSON through its
+C pointer and leaves host streams and upstream logging preferences alone.
+
+The separate memory job preserves an unsuppressed LSan run and requires a run
+with `detect_leaks=1` and the single known Foundation allocation frame excluded.
+It also verifies that deliberate malloc and unfreed bridge-response leaks still
+fail. See [the repair report](docs/fix-report-2026-10-08.md) for the measured
+runtime defect and the limits of sanitizer coverage.
 
 ## Uninstall
+
+For the Ubuntu package, run `sudo apt remove zhuyinflow`, then log out and
+back in. Personal dictionaries and preferences remain in HOME.
+
+For the user-local source installer:
 
 Remove **ZhuyinFlow** from Fcitx Configuration, then remove the user-local
 files installed by this project:
@@ -132,7 +187,8 @@ rm -f "$HOME/.local/lib/fcitx5/zhuyinflow.so" \
 rm -f "$HOME/.local/share/fcitx5/addon/zhuyinflow.conf" \
   "$HOME/.local/share/fcitx5/inputmethod/zhuyinflow.conf" \
   "$HOME/.local/share/icons/hicolor/scalable/apps/zhuyinflow.svg"
-rm -rf "${XDG_DATA_HOME:-$HOME/.local/share}/zhuyinflow"
+# Personal dictionaries and preferences under this directory are retained:
+# ${XDG_DATA_HOME:-$HOME/.local/share}/zhuyinflow
 ```
 
 Restart Fcitx after uninstalling. This does not remove Fcitx itself, system
@@ -165,12 +221,21 @@ this work upstream.
 ## Status and limitations
 
 - Tested locally with Swift 6.4, Fcitx 5.1.7, Ubuntu 24.04, and Fcitx
-  TestFrontend. The current source passed 6 Swift tests and 2 Fcitx CTest
-  tests in the local build.
+  TestFrontend: 6 local Swift tests, Debug/Release C ABI functional and golden
+  checks, and 12 headless CTest scenarios in each configuration passed.
+- Losing focus or switching input methods preserves composition in its original
+  input context and hides its UI. Returning restores it; unmodified Escape or an explicit
+  reset cancels it. Clients that commit preedit on unfocus use panel-only preedit;
+  other Preedit clients receive inline preedit marked DontCommit.
 - Desktop application behavior and panel-specific icon rendering should still
   be checked in the target Wayland/X11 session.
-- LeakSanitizer and desktop-session testing have not been run for the current
-  renamed source tree.
+- Swift 6.4 Linux Foundation leaks attributed-string run arrays in the tested
+  runtime. A standalone Foundation reproduction identifies the same allocation
+  root; the underlying runtime defect remains unfixed. The C harness is
+  instrumented with ASan, while the Swift bridge and dependencies are not fully
+  sanitizer-instrumented.
+- The Ubuntu `.deb` has isolated install/remove and loader checks; desktop
+  activation after upgrades still requires a new Fcitx process or login session.
 - This project is provided as-is, without warranty.
 
 See [`docs/desktop-testing.md`](docs/desktop-testing.md) for the manual desktop

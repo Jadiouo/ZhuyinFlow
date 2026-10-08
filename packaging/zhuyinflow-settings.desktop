@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ZhuyinFlow Settings
+Name[zh_TW]=注音流設定
+Comment=Configure the ZhuyinFlow Fcitx 5 input method
+Comment[zh_TW]=設定注音流 Fcitx 5 輸入法
+Exec=zhuyinflow-setup
+Icon=zhuyinflow
+Terminal=true
+Categories=Settings;
+Keywords=Zhuyin;Bopomofo;Fcitx;Input Method;

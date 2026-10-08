@@ -18,6 +18,7 @@ private struct VGBridgeResponse: Encodable {
   let composition: String
   let cursor: Int
   let candidates: [String]
+  let candidateSelectionActive: Bool
   let commit: String
 }
 
@@ -117,6 +118,11 @@ private final class VGBridgeSession {
     }
     InputSession.current = core
     client.clearCommit()
+    // An unmapped keysym is unhandled input, not the upstream nil-event reset.
+    // Preserve the snapshot and never replay a commit from the previous event.
+    guard let event else {
+      return try makeJSON(handled: false, commit: "")
+    }
     let handled = core.handleEvent(event)
     return try makeJSON(
       handled: handled,
@@ -185,11 +191,15 @@ private final class VGBridgeSession {
     } else {
       candidates = []
     }
+    // Suggestions during ordinary typing are not a selection mode: Dachen
+    // digit keys can start the next syllable. Only an explicit candidate state
+    // lets adapters interpret those keys as labels.
     let response = VGBridgeResponse(
       handled: handled,
       composition: core.state.displayedText,
       cursor: core.state.cursor,
       candidates: candidates,
+      candidateSelectionActive: !candidates.isEmpty && core.state.type == .ofCandidates,
       commit: commit
     )
     let encoder = JSONEncoder()

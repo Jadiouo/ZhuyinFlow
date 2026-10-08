@@ -1,0 +1,10 @@
+#!/bin/sh
+# SPDX-FileCopyrightText: 2026 ZhuyinFlow contributors
+# SPDX-License-Identifier: MulanPSL-2.0
+set -eu
+printf '%s\n' '注音流設定 / ZhuyinFlow settings' \
+  '在 Fcitx 設定加入「ZhuyinFlow」，使用 Ctrl+Space 切換。' \
+  '新增套件後請登出再登入，或自行重新啟動 Fcitx。' \
+  '此入口不會改變預設輸入法或重新啟動桌面服務。'
+zhuyinflow-migrate --check
+exec fcitx5-configtool

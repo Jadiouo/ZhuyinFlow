@@ -5,10 +5,13 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
-    container: swift:6.4
+    container: swift:6.4-noble
     steps:
       - name: Checkout repository and submodules
         uses: actions/checkout@v4
@@ -146,35 +149,53 @@ jobs:
             exit 1
           fi
 
-      - name: Test vg-repl
+      - name: Install headless Fcitx test dependencies
+        if: always()
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            cmake pkg-config libfcitx5core-dev libfcitx5config-dev \
+            libfcitx5utils-dev fcitx5-modules-dev fcitx5 nlohmann-json3-dev
+
+      - name: Test vg-repl and spelling golden
         if: always()
         shell: bash
         run: |
-          mkdir -p artifacts
-          swift test --no-parallel \
-            --package-path vg-repl \
+          swift test --no-parallel --package-path vg-repl \
             --xunit-output artifacts/vg-repl-xunit.xml \
             > artifacts/vg-repl-test.log 2>&1
-          swift build --package-path vg-repl --product vgbridge \
-            > artifacts/vgbridge-build.log 2>&1
-          bin_path="$(swift build --package-path vg-repl --show-bin-path)"
-          clang -fsanitize=address -g \
-            -I vg-repl/Sources/VGBridge/include \
-            vg-repl/Tests/c/test_vgbridge.c \
-            -L "$bin_path" -lvgbridge -Wl,-rpath,"$bin_path" \
-            -o /tmp/test_vgbridge \
-            > artifacts/vgbridge-compile.log 2>&1
-          LD_LIBRARY_PATH="$bin_path" ASAN_OPTIONS=detect_leaks=1 \
-            /tmp/test_vgbridge > artifacts/vgbridge.jsonl
           printf 's\nu\n3\n' \
             | swift run --package-path vg-repl --quiet vg-repl --layout dachen \
             > artifacts/vg-repl-golden.jsonl
           diff -u vg-repl/Tests/Fixtures/fcitx-su3.jsonl \
             artifacts/vg-repl-golden.jsonl
-          diff -u vg-repl/Tests/Fixtures/fcitx-su3.jsonl \
-            artifacts/vgbridge.jsonl
-          printf 'Swift and C bridge tests passed; outputs match the shared golden.\n' \
-            > artifacts/vgbridge-status.txt
+
+      - name: Debug and Release C ABI functions and output contract
+        if: always()
+        shell: bash
+        run: |
+          for configuration in debug release; do
+            swift build --package-path vg-repl -c "$configuration" --product vgbridge \
+              > "artifacts/vgbridge-$configuration-build.log" 2>&1
+            bin_path="$(swift build --package-path vg-repl -c "$configuration" --show-bin-path)"
+            clang -DNDEBUG -O2 -g -I vg-repl/Sources/VGBridge/include \
+              vg-repl/Tests/c/test_vgbridge.c -L "$bin_path" -lvgbridge \
+              -Wl,-rpath,"$bin_path" -o "/tmp/test_vgbridge-$configuration" \
+              > "artifacts/vgbridge-$configuration-compile.log" 2>&1
+            LD_LIBRARY_PATH="$bin_path" bash vg-repl/Tests/c/test_output_contract.sh \
+              "/tmp/test_vgbridge-$configuration" vg-repl/Tests/Fixtures/fcitx-su3.jsonl \
+              "artifacts/vgbridge-$configuration"
+          done
+
+      - name: Debug and Release headless Fcitx regression
+        if: always()
+        shell: bash
+        run: |
+          for configuration in Debug Release; do
+            bin_path="$(swift build --package-path vg-repl -c "${configuration,,}" --show-bin-path)"
+            bash vg-repl/scripts/test-headless.sh "$bin_path" \
+              "artifacts/fcitx-$configuration" "$configuration"
+          done
 
       - name: Upload test results
         if: always()
@@ -182,4 +203,90 @@ jobs:
         with:
           name: m1-libvanguard-linux-results
           path: artifacts/
+          if-no-files-found: warn
+
+  memory:
+    runs-on: ubuntu-latest
+    container: swift:6.4-noble
+    steps:
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build fresh bridge for memory checks
+        shell: bash
+        run: |
+          mkdir -p artifacts/memory
+          swift build --package-path vg-repl --product vgbridge \
+            > artifacts/memory/build.log 2>&1
+
+      - name: Strict diagnostic and required narrow LSan check
+        shell: bash
+        run: |
+          bin_path="$(swift build --package-path vg-repl --show-bin-path)"
+          bash vg-repl/scripts/test-memory.sh "$bin_path" artifacts/memory \
+            > artifacts/memory/result.log 2>&1
+
+      - name: Publish memory verdicts
+        if: always()
+        shell: bash
+        run: |
+          if [ -f artifacts/memory/strict.exit ]; then
+            strict_status="$(cat artifacts/memory/strict.exit)"
+            printf 'Unsuppressed LSan exit: %s. Full diagnostics are uploaded.\n' "$strict_status" \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [ -f artifacts/memory/strict-classification.log ]; then
+            cat artifacts/memory/strict-classification.log >> "$GITHUB_STEP_SUMMARY"
+          fi
+          printf 'The required check keeps detect_leaks=1 and excludes only ^CFRunArrayCreate$. Intentional malloc and bridge response leaks must still fail. The known Foundation leak remains unfixed.\n' \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload memory diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-memory-results
+          path: artifacts/memory/
+          if-no-files-found: warn
+
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build Ubuntu 24.04 amd64 package and matching sources
+        shell: bash
+        env:
+          ZHUYINFLOW_PACKAGE_WORK: ${{ runner.temp }}/zhuyinflow-package
+          ZHUYINFLOW_PACKAGE_OUTPUT: ${{ github.workspace }}/dist
+          ZHUYINFLOW_VERSION: 0.1.0
+        run: |
+          build_log="$RUNNER_TEMP/zhuyinflow-package-build.log"
+          trap 'mkdir -p artifacts; cp "$build_log" artifacts/package-build.log' EXIT
+          bash packaging/build-deb.sh 2>&1 | tee "$build_log"
+          (cd dist && sha256sum -c zhuyinflow_0.1.0_SHA256SUMS)
+
+      - name: Verify package installation, installed code, and removal
+        shell: bash
+        run: |
+          bash packaging/verify-deb.sh dist/zhuyinflow_0.1.0_amd64.deb \
+            artifacts/package-verify \
+            2>&1 | tee artifacts/package-verify.log
+
+      - name: Upload installable package, sources, and verification logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zhuyinflow-ubuntu-24.04-amd64
+          path: |
+            dist/*.deb
+            dist/*_sources.tar.xz
+            dist/*_SHA256SUMS
+            artifacts/package-*.log
+            artifacts/package-verify/
           if-no-files-found: warn

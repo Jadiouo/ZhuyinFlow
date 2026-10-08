@@ -11,7 +11,8 @@ modify, the vChewing Vanguard core pinned in the `upstream` Git submodule at
 | ZhuyinFlow-authored project files, including bridge, Fcitx adapter, REPL, packaging, tests, icon, and documentation | MulanPSL-2.0 | This repository |
 | vChewing Vanguard Swift core and its modules | LGPL-3.0-or-later, with module-specific additional permissions | `upstream/Packages/vChewing_OSNeutral_LibVanguard/` |
 | Vanguard Lexicon builder source | MulanPSL-2.0 | [vChewing-VanguardLexicon](https://github.com/vChewing/vChewing-VanguardLexicon), pinned by the installer |
-| Fcitx 5, Swift runtime, and host packages | Their respective upstream licenses | System packages / Docker image; not vendored here |
+| Fcitx 5 and host packages | Their respective upstream licenses | System packages; not bundled in the `.deb` |
+| Swift 6.4 runtime, Foundation, Dispatch/BlocksRuntime and ICU 76.1 | Apache-2.0 with Swift runtime exception and applicable third-party notices | Private runtime closure in the `.deb`; original texts under `packaging/licenses/` |
 
 The complete upstream Vanguard package license, module license texts, and all
 custom LGPL exceptions are copied unchanged under `upstream-vanguard/`. The
@@ -21,11 +22,22 @@ under `MulanPSL-2.0-upstream-reference.txt` retains the upstream's original
 attribution and contains the MulanPSL-2.0 terms referenced for our code; it is
 not a claim that ZhuyinFlow was authored by the vChewing Project.
 
-The installer downloads the lexicon source and builds a TextMap locally; this
-repository does not distribute that generated dictionary. The builder's
-upstream license notice is included in `lexicon/VanguardLexicon-LICENSE.txt`.
-The source data used to build a dictionary may carry additional notices, so
-review those notices before redistributing generated data.
+The user-local installer downloads the lexicon source and builds a TextMap
+locally. The Git source tree does not contain generated dictionaries; the
+Ubuntu binary package includes a factory TextMap rebuilt from the pinned,
+unmodified lexicon export. The builder's MulanPSL notice remains in
+`lexicon/VanguardLexicon-LICENSE.txt`. Source data retain their own terms,
+including MOE CC BY-ND 3.0 Taiwan, CNS OGD v1.0 and LibTaBE BSD notices;
+MulanPSL does not replace those terms. See `packaging/licenses/NOTICE.md`
+and the unchanged full data notices in that directory.
+
+The binary package installs licenses under `/usr/share/doc/zhuyinflow/`,
+including GPL/LGPL, all Vanguard module exceptions, runtime licenses and
+data notices. Its companion source archive contains the corresponding
+working tree, pinned Vanguard and lexicon exports, content manifest and
+build/relinking instructions. `packaging/rebuild-export.sh` builds that
+archive without Git metadata. No license grant for vChewing branding is
+inferred from these software or data terms.
 
 ## Required notices when redistributing
 

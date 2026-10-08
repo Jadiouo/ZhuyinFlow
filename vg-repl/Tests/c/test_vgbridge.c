@@ -3,14 +3,19 @@
 
 #include "vgbridge.h"
 
+/* Assertions must remain active even when this harness is built with NDEBUG. */
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 static const char *kConfig = "{\"layout\":\"dachen\"}";
 static const char *kLexiconConfig =
-    "{\"layout\":\"dachen\",\"lexicon\":\"upstream/Packages/"
+    "{\"layout\":\"dachen\",\"mixedAlphanumericalEnabled\":false,\"lexicon\":\"upstream/Packages/"
     "vChewing_OSNeutral_LibVanguard/Sources/LXAssemblyMaterials4Tests/"
     "Resources/vanguardTextMap_test.txtMap\"}";
 static const char *kFuriousConfig =
@@ -75,7 +80,142 @@ static void assert_commit(const char *json, const char *value) {
   assert(strstr(json, expected) != NULL);
 }
 
-int main(void) {
+/* Compare the complete snapshot, including cursor and candidate ordering. */
+static void assert_unknown_preserves(vg_session *session, const char *snapshot,
+                                     uint32_t keycode) {
+  assert(strstr(snapshot, "\"commit\":\"\"") != NULL);
+  const char *handled = strstr(snapshot, "\"handled\":");
+  assert(handled != NULL);
+  const char *value = handled + strlen("\"handled\":");
+  const char *suffix = value + (strncmp(value, "true", 4) == 0 ? 4 : 5);
+  size_t prefixLength = (size_t)(value - snapshot);
+  char *expected = malloc(strlen(snapshot) + 2);
+  assert(expected != NULL);
+  memcpy(expected, snapshot, prefixLength);
+  strcpy(expected + prefixLength, "false");
+  strcat(expected, suffix);
+  for (int down = 1; down >= 0; --down) {
+    char *result = vg_feed_key(session, keycode, 0, down);
+    assert(result != NULL);
+    if (strcmp(result, expected) != 0) {
+      fprintf(stderr, "Unsupported key %x down=%d changed snapshot:\nexpected %s\nactual   %s\n",
+              keycode, down, expected, result);
+      abort();
+    }
+    vg_string_free(result);
+  }
+  free(expected);
+}
+
+static void test_unsupported_keys(void) {
+  vg_session *session = vg_session_new(kLexiconConfig);
+  assert(session != NULL);
+  char *result = feed(session, 0x045);
+  vg_string_free(result);
+  result = feed(session, 0x04c);
+  assert(strstr(result, "\"composition\":\"ㄍㄠ\"") != NULL);
+  assert_unknown_preserves(session, result, 0xffc8); /* F11, unfinished reading. */
+  assert_unknown_preserves(session, result, 0xffc9); /* F12, same nil-event seam. */
+  vg_string_free(result);
+  vg_reset(session);
+
+  result = type_tech_phrase(session);
+  assert(strstr(result, "\"composition\":\"科技\"") != NULL);
+  assert_unknown_preserves(session, result, 0xffc8);
+  vg_string_free(result);
+  result = feed(session, 0x045);
+  vg_string_free(result);
+  result = feed(session, 0x04c);
+  assert(strstr(result, "\"composition\":\"科技ㄍㄠ\"") != NULL);
+  assert_unknown_preserves(session, result, 0xffc8);
+  vg_string_free(result);
+  vg_reset(session);
+  result = type_tech_phrase(session);
+  vg_string_free(result);
+  result = feed(session, 0xff54); /* Enter the upstream candidate state. */
+  assert(strstr(result, "\"candidates\":[]") == NULL);
+  assert_unknown_preserves(session, result, 0xffc8);
+  vg_string_free(result);
+
+  result = vg_select_candidate(session, 0);
+  assert(result != NULL);
+  const char *phrase = selected_phrase(result);
+  vg_string_free(result);
+  result = feed(session, 0xff0d);
+  assert_commit(result, phrase);
+  vg_string_free(result);
+  /* A committed response must never be replayed by an unsupported event. */
+  for (int down = 1; down >= 0; --down) {
+    result = vg_feed_key(session, 0xffc8, 0, down);
+    assert(result != NULL);
+    assert(strcmp(result, "{\"candidateSelectionActive\":false,\"candidates\":[],\"commit\":\"\",\"composition\":\"\",\"cursor\":0,\"handled\":false}") == 0);
+    vg_string_free(result);
+  }
+  vg_session_free(session);
+}
+
+static void test_candidate_selection_state(void) {
+  for (int mixed = 0; mixed <= 1; ++mixed) {
+    char config[512];
+    int written = snprintf(config, sizeof(config),
+        "{\"layout\":\"dachen\",\"mixedAlphanumericalEnabled\":%s,"
+        "\"furiousTypingEnabled4Zhuyin\":true,\"lexicon\":\"upstream/Packages/"
+        "vChewing_OSNeutral_LibVanguard/Sources/LXAssemblyMaterials4Tests/"
+        "Resources/vanguardTextMap_test.txtMap\"}", mixed ? "true" : "false");
+    assert(written > 0 && (size_t)written < sizeof(config));
+    vg_session *session = vg_session_new(config);
+    assert(session != NULL);
+    const uint32_t keys[] = {0x053, 0x055, 0x033};
+    for (size_t i = 0; i < 3; ++i) {
+      char *result = feed(session, keys[i]);
+      assert(result != NULL);
+      assert(strstr(result, "\"candidateSelectionActive\":false") != NULL);
+      if (i == 2) assert(strstr(result, "\"composition\":\"你\"") != NULL);
+      vg_string_free(result);
+    }
+    /* 2 is a Dachen consonant: suggestions must not consume the next syllable. */
+    char *result = feed(session, 0x032);
+    assert(result != NULL);
+    assert_commit(result, "");
+    assert(strstr(result, "\"candidateSelectionActive\":false") != NULL);
+    assert(strstr(result, "\"composition\":\"你\"") == NULL);
+    vg_string_free(result);
+    vg_reset(session);
+    for (size_t i = 0; i < 3; ++i) {
+      result = feed(session, keys[i]);
+      vg_string_free(result);
+    }
+    result = feed(session, 0xff54);
+    assert(strstr(result, "\"candidateSelectionActive\":true") != NULL);
+    vg_string_free(result);
+    result = vg_select_candidate(session, 0);
+    assert(strstr(result, "\"candidateSelectionActive\":false") != NULL);
+    vg_string_free(result);
+    result = feed(session, 0xff0d);
+    assert_commit(result, "你");
+    assert(strstr(result, "\"candidateSelectionActive\":false") != NULL);
+    vg_string_free(result);
+    vg_session_free(session);
+  }
+}
+
+int main(int argc, char **argv) {
+  /* This executable owns stdout as a golden JSON stream. Preserve a dedicated
+   * writer before directing upstream diagnostics to stderr. The library itself
+   * does not redirect host process streams or change the upstream debug setting.
+   */
+  int goldenFD = dup(STDOUT_FILENO);
+  assert(goldenFD >= 0);
+  FILE *goldenOutput = fdopen(goldenFD, "w");
+  assert(goldenOutput != NULL);
+  assert(fflush(stdout) == 0);
+  assert(dup2(STDERR_FILENO, STDOUT_FILENO) >= 0);
+  if (argc == 2 && strcmp(argv[1], "--unsupported-keys") == 0) {
+    test_unsupported_keys();
+    assert(fclose(goldenOutput) == 0);
+    return 0;
+  }
+
   assert(vg_session_new(NULL) == NULL);
   assert(vg_session_new("{") == NULL);
   assert(vg_session_new("{\"layout\":\"missing\"}") == NULL);
@@ -87,7 +227,7 @@ int main(void) {
 
   char *result = feed(sessionA, 0x053);
   assert(result != NULL);
-  puts(result);
+  assert(fprintf(goldenOutput, "%s\n", result) > 0);
   assert(strstr(result, "\"composition\":\"ㄋ\"") != NULL);
   vg_string_free(result);
 
@@ -99,13 +239,13 @@ int main(void) {
 
   result = feed(sessionA, 0x055);
   assert(result != NULL);
-  puts(result);
+  assert(fprintf(goldenOutput, "%s\n", result) > 0);
   assert(strstr(result, "\"composition\":\"ㄋㄧ\"") != NULL);
   vg_string_free(result);
 
   result = feed(sessionA, 0x033);
   assert(result != NULL);
-  puts(result);
+  assert(fprintf(goldenOutput, "%s\n", result) > 0);
   assert(strstr(result, "\"composition\":\"ㄋㄧˇ\"") != NULL);
   vg_string_free(result);
 
@@ -161,6 +301,9 @@ int main(void) {
   assert_commit(result, firstSelectedPhrase);
   vg_string_free(result);
 
+  test_unsupported_keys();
+  test_candidate_selection_state();
+
   vg_session *furiousSession = vg_session_new(kFuriousConfig);
   assert(furiousSession != NULL);
   result = type_furious_zhuyin(furiousSession);
@@ -182,5 +325,6 @@ int main(void) {
     vg_session_free(session);
   }
 
+  assert(fclose(goldenOutput) == 0);
   return 0;
 }
