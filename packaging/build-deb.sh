@@ -62,7 +62,7 @@ if ! docker image inspect "$swift_image" >/dev/null 2>&1; then
 fi
 swift_build_base=$(docker image inspect "$swift_image" --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}')
 swift_build_base=${swift_build_base:-$swift_image}
-docker image inspect "$swift_image" --format '{{.Id}} {{join .RepoDigests " "}}' > "$work/source/SWIFT-IMAGE"
+docker image inspect "$swift_image" --format '{{.Id}}{{range .RepoDigests}} {{.}}{{end}}' > "$work/source/SWIFT-IMAGE"
 docker build --build-arg "SWIFT_IMAGE=$swift_build_base" -t "$image" "$repo/packaging"
 docker image inspect "$image" --format '{{.Id}}' > "$work/build-image.txt"
 docker run --rm --network=none "$image" dpkg-query -W > "$work/source/BUILD-PACKAGES"
